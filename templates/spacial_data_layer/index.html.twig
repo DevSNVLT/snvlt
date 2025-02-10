@@ -1,0 +1,581 @@
+{% extends 'template_base.html.twig' %}
+
+{% block Title %}
+    {% trans %}SNVLT{% endtrans %} - {% trans %}Webmapping{% endtrans %}
+{% endblock %}
+
+{% block titre_page %}
+
+    <h2 class="text-dark font-weight-bold mb-2">
+        <img src="{{ asset('assets/images/webapp/carto.png') }}" alt="attribution">  {% trans %}Webmapping{% endtrans %}
+    </h2>
+    <div class="d-sm-flex justify-content-xl-between align-items-center mb-2">
+    <button class="btn btn-primary" style="display: none" id="ctaButton">Liste PEF</button>
+        <span class="font-weight-bold" style="font-size: 18px;">Critère</span>
+        <select class="m-1"  name="critere" id="critere"  style="font-size: 14px;background-color: #9ef5b0; border: 1px solid lightgrey;color: #040404; width:150px;padding: 5px;">
+            <option value="0">--Sélectionnez un critère--</option>
+            <option value="1">Chargement Grumes</option>
+            <option value="2">Bille</option>
+            <option value="3">LAC</option>
+        </select>
+        <select class="m-1"  name="pef" id="pef"  style="font-size: 14px;background-color: #9ef5b0; border: 1px solid lightgrey;color: #040404; width:150px;padding: 5px;">
+
+        </select>
+        <select class="m-1"  name="liste_chargements" id="liste_chargements"  style="font-size: 14px;background-color: #9ef5b0; border: 1px solid lightgrey;color: #040404; width:150px;padding: 5px;">
+
+        </select>
+        <input type="text" placeholder="numero bille" id="numero_bille">
+        <a href="#" id="btn_search" class="btn btn-primary btn-sm">{{ 'Search' | trans}}</a>
+         <select class="m-1"  name="critere" id="critere"  style="font-size: 14px;background-color: #9ed7f5; border: 1px solid lightgrey;color: #040404; width:150px;padding: 5px;">
+            <option value="1">--Sélectionnez la forêt--</option>
+        </select>
+        <label for="" class="text-danger font-weight-bold" style="margin-left: 5px;" id="lbl_pef"></label>
+    </div>
+{% endblock %}
+
+ {% block notifs %}
+     {% include 'base/notifs.html.twig' %}
+ {% endblock %}
+
+ {% block menu %}
+     {% include 'base/menu.html.twig' %}
+ {% endblock %}
+{% block page_content %}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/terraformer@1.0.8/terraformer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/terraformer-wkt-parser@1.1.2/terraformer-wkt-parser.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .controls {
+            display: flex;
+            justify-content: end;
+            gap:10px;
+            margin-bottom: 20px;
+        }
+        .controls select,
+        .controls button {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #map {
+            height: 60vh;
+            border-radius: 8px;
+        }
+    </style>
+
+    <div class="">
+
+        <div id="map"></div>
+    </div>
+    <script src="{{ asset('assets/webapp/assets/vendors/jquery/jquery.min.js') }}"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+
+        let chargements = document.querySelector('#liste_chargements');
+
+
+        // Initialize the map
+        const maptilerApiKey = 'WydFNLpS6gHVVGqhkpYB';
+        const coteDivoire = [6.246855, -5.5471]; // Latitude, Longitude
+        const map = L.map('map').setView(coteDivoire, 8); // Zoom sur la basilique
+
+        //osm layer
+        var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        });
+        osm.addTo(map);
+        // map.addLayer(osm)
+
+        // water color
+        var watercolor = L.tileLayer('https://stamen-tiles-{s}.a.ssl.fastly.net/watercolor/{z}/{x}/{y}.{ext}', {
+            attribution: 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            subdomains: 'abcd',
+            minZoom: 1,
+            maxZoom: 16,
+            ext: 'jpg'
+        });
+        // watercolor.addTo(map)
+
+        // dark map
+        var dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 19
+        });
+        // dark.addTo(map)
+
+        // google street
+        googleStreets = L.tileLayer('http://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+            maxZoom: 20,
+            subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+        });
+        // googleStreets.addTo(map);
+
+        //google satellite
+        googleSat = L.tileLayer('http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+            maxZoom: 20,
+            subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+        });
+
+        var baseMaps = {
+            "OSM": osm,
+            "Water color map": watercolor,
+            'Dark': dark,
+            'Google Street': googleStreets,
+            "Google Satellite": googleSat,
+        };
+
+        L.control.layers(baseMaps).addTo(map);
+        L.control.zoom(zoomInText).addTo(map)
+        document.getElementById('ctaButton').addEventListener('click', async () => {
+            //const selectedValue = event.target.value;
+            //if (selectedValue) {
+                try {
+                    let response = await fetch(`http://localhost:8000/api/spacial-data-layer/polygon`);
+                    let data = await response.json();
+                    if (data.success===true) {
+
+                    for(var i=0; i < data.data.length; i++){
+                        //let data_geom = JSON.parse(data);
+                        //alert(data.data.length)
+                            let geoJSON = JSON.parse(data.data[i].geom)
+                            let numero_pef = JSON.parse(data.data[i].numero_pef)
+                        //alert(numero_pef)
+                            if (data.data[i].zone_ === "29N"){
+                                var polygon = L.geoJSON(geoJSON, {
+                                    color: '#0f3d03',
+                                    fillColor: '#889103',
+                                    fillOpacity: 0.5,
+                                    weight:2,
+                                    lineCap:'round'
+                                });
+                            } else {
+                                var polygon = L.geoJSON(geoJSON, {
+                                    color: '#d39106',
+                                    fillColor: '#368111',
+                                    fillOpacity: 0.5,
+                                    weight:2,
+                                    lineCap:'round'
+                                });
+                            }
+                        var popup = polygon.bindPopup(numero_pef.toString()).openPopup()
+                        popup.addTo(map);
+                            // var popup = L.popup()
+                            // .setLatLng(geoJSON)
+                            // .setContent(data.data[i].numero_pef)
+                            // .openOn(map);
+
+
+                        }
+                        map.fitBounds(coteDivoire);
+                    }else{
+                        alert(data.message)
+                    }
+
+                } catch (error) {
+                    console.error(error);
+                }
+           // }
+        });
+        document.getElementById('ctaButton').click();
+
+        document.getElementById('liste_chargements').addEventListener('change', async (event) => {
+
+            const selectedValue = event.target.value;
+            if (selectedValue) {
+                try {
+                    let response = await fetch(`{{ path('app_portail') }}api/spacial-data-layer/getPointBrh?code=${selectedValue}`);
+                    let data = await response.json();
+                    if (data.success===true) {
+                        //alert(data.data.length);
+                        let point
+                        for(var i=0; i < data.data.length; i++){
+
+                            let geoJSON = JSON.parse(data.data[i].geom)
+                            let bille = data.data[i].numero_lignepagebrh.toString().concat(data.data[i].lettre_lignepagebrh.toString());
+                            let contenu = '<div class="p-2 alert-success"><h1>' + bille + '</h1><hr>';
+                                contenu = contenu + '<h4><span>L :</span><span class="text-danger">' + data.data[i].longeur_lignepagebrh.toString() + 'm</span><h4>';
+                                contenu = contenu + '<h2><span>L :</span><span class="text-danger">' + data.data[i].essence.toString() + '</span><h2>';
+                                contenu = contenu + '<h4><span>D :</span><span class="text-danger">' + data.data[i].diametre_lignepagebrh.toString() + 'm</span><h4>';
+                                contenu = contenu + '<h4><span>V :</span><span class="text-danger">' + data.data[i].cubage_lignepagebrh.toString() + 'm<sup>3</sup></span><h4></div>';
+                                 point = L.geoJSON(geoJSON, {
+                                    color: '#d39106',
+                                    fillColor: '#ffffff',
+                                    fillOpacity: 1,
+                                    weight:2,
+                                    lineCap:'round'
+                                }).addTo(map);
+
+                            var popup = point.bindPopup(contenu)
+                            popup.addTo(map);
+                            // var popup = L.popup()
+                            // .setLatLng(geoJSON)
+                            // .setContent(data.data[i].numero_pef)
+                            // .openOn(map);
+
+
+                        }
+                        map.fitBounds(point.getBounds());
+
+                    }else{
+                        alert(data.message)
+                    }
+
+                } catch (error) {
+                    console.error(error);
+                }
+            }
+        });
+
+
+        let bille = document.querySelector('#numero_bille');
+        let critere = document.querySelector('#critere');
+        let pef = document.querySelector('#pef');
+        let btn_search = document.querySelector('#btn_search');
+
+        var element = document.getElementById('popup');
+        let contenu_chr = "";
+        // map.addOverlay(popup);
+
+
+        map.on('click', function (evt) {
+            var feature = map.forEachFeatureAtPixel(evt.pixel, function (feature, layer) {
+                return feature;
+            });
+
+            if (feature) {
+                var geometry = feature.getGeometry();
+                var coord = geometry.getCoordinates();
+                var name = feature.get('name'); // Assuming 'name' is a property in your GeoJSON
+
+                popup.setPosition(coord);
+                $(element).popover({
+                    'placement': 'top',
+                    'html': true,
+                    'content': '<p>' + name + '</p>'
+                });
+                $(element).popover('show');
+            } else {
+                $(element).popover('destroy');
+            }
+        });
+
+
+        critere.value = 0;
+
+        bille.style = "display:none"
+        pef.style = "display:none"
+        chargements.style = "display:none"
+        btn_search.style = "display:none"
+
+        critere.addEventListener('change', function (){
+            let valeur = this.value;
+
+            bille.style = "display:none"
+            pef.style = "display:none"
+            chargements.style = "display:none"
+
+            if (valeur === "1"){
+                pef.style = "display:inline"
+                chargements.style = "display:inline"
+            }if (valeur === "2"){
+                bille.style = "display:inline"
+                btn_search.style = "display:inline"
+            }
+        })
+
+        /*   btn_search.addEventListener('change', function (){
+               recherche_bille(bille.value)
+           })*/
+
+        $("#btn_search").on("click", function (event) {
+            recherche_bille(bille.value)
+        });
+
+        liste_pef();
+
+
+
+
+
+
+        $("#pef").on("change", function () {
+            liste_tous_chargements(this.value)
+            //map.set("isLoading", 'YES');
+
+            // if (featureOverlay) {
+            //     featureOverlay.getSource().clear();
+            //     map.removeLayer(featureOverlay);
+            // }
+
+            let id_pef = this.value;
+            $.ajax({
+                url : '{{path('app_portail')}}snvlt/page/pef/' + id_pef,
+                type: 'POST',
+                success: function (response){
+                    let info = JSON.parse(response)
+                    $('#lbl_pef').text(info[0].exploitant)
+                }
+            })
+
+            // var layer =  "SNVLT:exp_pef";
+            // var attribute = "numero_perimetre";
+            // var operator = "=";
+            // var txt = this.options[this.selectedIndex].text;
+            //
+            //
+            //
+            // var url =  + serverPort + "/geoserver/" + geoserverWorkspace + "/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=" + layer + "&CQL_FILTER=" + attribute + "+" + operator + "+'" + txt + "'&outputFormat=application/json"
+            // newaddGeoJsonToMap(url);
+            // //newpopulateQueryTable(url);
+            // //setTimeout(function () { newaddRowHandlers(url); }, 1000);
+            // map.addLayer(clickSelectedFeatureOverlay);
+            // map.set("isLoading", 'NO');
+        });
+
+
+
+        function liste_pef(){
+            let contenu = '<option>{{ 'Select Forest' | trans}}</option>';
+            $.ajax({
+                url :'{{ path('app_liste_forets') }}',
+                type : 'POST',
+                success : function (response){
+                    let liste_forets = JSON.parse(response);
+                    for(var i = 0; i< liste_forets.length ; i++){
+                        contenu = contenu + '<option value="' + liste_forets[i].id_foret + '">' + liste_forets[i].numero_foret + '</option>'
+                    }
+                    document.querySelector('#pef').innerHTML = contenu;
+                }
+            })
+        }
+
+        function liste_tous_chargements(id_pef){
+            let contenu = '<option>{{ 'Select loading' | trans}}</option>';
+            $.ajax({
+                url :'{{path('app_portail')}}snvlt/chargements/lst/'+ id_pef,
+                type : 'POST',
+                success : function (response){
+                    let liste_forets = JSON.parse(response);
+                    for(var i = 0; i< liste_forets.length ; i++){
+                        contenu = contenu + '<option value="' + liste_forets[i].pageid + '">' + liste_forets[i].numero_page + '</option>'
+                    }
+                    document.querySelector('#liste_chargements').innerHTML = contenu;
+                }
+            })
+        }
+
+        {#function chargement_infos(id_page){#}
+        {#    var IconsPefGroup = [];#}
+        {#    var iconPef = [];#}
+        {#    let numero_bille = "";#}
+        {#    $.ajax({#}
+        {#        url :'{{path('app_portail')}}snvlt/chargement_info/'+ id_page,#}
+        {#        type : 'POST',#}
+        {#        success : function (response){#}
+        {#            let billes= JSON.parse(response);#}
+
+        {#            for(let i = 0; i< billes.length ; i++){#}
+        {#                var Zone = billes[i].zh.substring(0, 2);#}
+        {#                numero_bille = "";#}
+        {#                var urlConvert="https://geodesy.noaa.gov/api/ncat/utm?utmZone=" + Zone + "&northing="+ billes[i].y + "&easting=" + billes[i].x +"&hemi=N&a=6378160.0&invf=298.25";#}
+        {#                var http_request;#}
+
+        {#                http_request = new XMLHttpRequest();#}
+        {#                http_request.onreadystatechange = function () { /* .. */ };#}
+        {#                http_request.open("POST", urlConvert);#}
+        {#                http_request.withCredentials = true;#}
+        {#                //http_request.setRequestHeader("Content-Type", "application/json");#}
+
+        {#                //alert(urlConvert);#}
+        {#                //alert(urlConvert);#}
+        {#                //caption.textContent = 'Essences exploitées : '+ n + "/" + compteur;#}
+
+        {#                if (urlConvert) {#}
+        {#                    setTimeout(5000);#}
+        {#                    $.getJSON(urlConvert, function (data) {#}
+        {#                        var srcLat = data.srcLat;#}
+        {#                        var srcLon = data.srcLon;#}
+
+
+        {#                        var pos = ol.proj.fromLonLat([srcLon , srcLat]);#}
+
+        {#                        iconPef[i] = new ol.Feature({#}
+        {#                            geometry : new ol.geom.Point(ol.proj.transform([srcLon , srcLat], 'EPSG:4326', 'EPSG:3857')),#}
+        {#                            label   : billes[i].numero_bille,#}
+        {#                            Zone	 : billes[i].zh,#}
+        {#                            essence  : billes[i].essence,#}
+        {#                            longueur : billes[i].lng,#}
+        {#                            diametre : billes[i].dm,#}
+        {#                            volume   : billes[i].vol#}
+        {#                        });#}
+        {#                        //var marker = new ol.Feature(new ol.geom.Point(coordinates).transform('EPSG:4326', map.getView().getProjection()));#}
+        {#                        IconsPefGroup.push(iconPef[i]);#}
+
+        {#                        var vecteurSourcePef = new ol.source.Vector({#}
+        {#                            features : IconsPefGroup#}
+        {#                        });#}
+        {#                        numero_bille = billes[i].numero_bille;#}
+        {#                        var text_feature = "";#}
+        {#                        text_feature = numero_bille;#}
+        {#                        var iconPefStyle = new ol.style.Style({#}
+        {#                            image: new ol.style.Circle({#}
+        {#                                radius: 12,#}
+        {#                                fill: new ol.style.Fill({color: '#5df492'}),#}
+        {#                                stroke: new ol.style.Stroke({color: '#fe0419', width: 1})#}
+        {#                            }),#}
+
+
+        {#                            text: new ol.style.Text({#}
+        {#                                text: billes[i].numero_bille, // Get the name attribute from the feature#}
+        {#                                font: '16px Arial',#}
+        {#                                offsetY : 20,#}
+        {#                                offsetX : 20,#}
+        {#                                fill: new ol.style.Fill({color: '#121212'}),#}
+        {#                                stroke: new ol.style.Stroke({color: '#000', width: 0})#}
+        {#                            })#}
+        {#                        })#}
+
+        {#                        var vectorLayer = new ol.layer.Vector({#}
+        {#                            source : vecteurSourcePef,#}
+        {#                            style : iconPefStyle,#}
+        {#                            visible : true,#}
+        {#                            displayInLayerSwitcher: true#}
+        {#                        });#}
+
+        {#                        map.addLayer(vectorLayer);#}
+        {#                        //overlayGroup.addLayer(vectorLayer);#}
+        {#                        map.getView().setCenter(pos);#}
+        {#                        map.getView().setZoom(12);#}
+        {#                        //alert(numero_bille)#}
+        {#                    });#}
+
+        {#                }#}
+        {#            }#}
+        {#        }#}
+        {#    })#}
+        {#}#}
+
+
+
+        function recherche_bille(numero_bille) {
+            let criteres = ""
+            // rechercher les forets associées
+            //let numero_page = $('#search_criteria').val();
+            $.ajax({
+                url :'{{path('app_portail')}}snvlt/billes_recherche/'+ numero_bille,
+                type: 'POST',
+                success: function (response){
+                    let forets= JSON.parse(response);
+                    for(let i = 0; i< forets.length ; i++){
+                        criteres = criteres + " numero_perimetre=" + forets[i].foret + " OR"
+                    }
+                    criteres = criteres.slice(0, criteres.length - 3)
+                    //alert(criteres);
+                    //Affichage sur la carte
+
+
+
+                    if (featureOverlay) {
+                        featureOverlay.getSource().clear();
+                        map.removeLayer(featureOverlay);
+                    }
+
+
+                    var layer =  "SNVLT:exp_pef";
+
+
+
+
+                    var url =  serverPort + "/geoserver/" + geoserverWorkspace + "/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=" + layer + "&CQL_FILTER=" + criteres + "'&outputFormat=application/json"
+                    alert(url)
+                    newaddGeoJsonToMap(url);
+                    //newpopulateQueryTable(url);
+                    //setTimeout(function () { newaddRowHandlers(url); }, 1000);
+                    map.addLayer(clickSelectedFeatureOverlay);
+                    map.set("isLoading", 'NO');
+                }
+            })
+        }
+
+        //alert(utmToLatLng(29, 660472, 730677, 'N').latitude +", " + utmToLatLng(30, 400508, 686545, 'N').longitude)
+
+        function utmToLatLng(zone, easting, northing, northernHemisphere){
+            if (!northernHemisphere){
+                northing = 10000000 - northing;
+            }
+
+            var a = 6378137;
+            var e = 0.081819191;
+            var e1sq = 0.006739497;
+            var k0 = 0.9996;
+
+            var arc = northing / k0;
+            var mu = arc / (a * (1 - Math.pow(e, 2) / 4.0 - 3 * Math.pow(e, 4) / 64.0 - 5 * Math.pow(e, 6) / 256.0));
+
+            var ei = (1 - Math.pow((1 - e * e), (1 / 2.0))) / (1 + Math.pow((1 - e * e), (1 / 2.0)));
+
+            var ca = 3 * ei / 2 - 27 * Math.pow(ei, 3) / 32.0;
+
+            var cb = 21 * Math.pow(ei, 2) / 16 - 55 * Math.pow(ei, 4) / 32;
+            var cc = 151 * Math.pow(ei, 3) / 96;
+            var cd = 1097 * Math.pow(ei, 4) / 512;
+            var phi1 = mu + ca * Math.sin(2 * mu) + cb * Math.sin(4 * mu) + cc * Math.sin(6 * mu) + cd * Math.sin(8 * mu);
+
+            var n0 = a / Math.pow((1 - Math.pow((e * Math.sin(phi1)), 2)), (1 / 2.0));
+
+            var r0 = a * (1 - e * e) / Math.pow((1 - Math.pow((e * Math.sin(phi1)), 2)), (3 / 2.0));
+            var fact1 = n0 * Math.tan(phi1) / r0;
+
+            var _a1 = 500000 - easting;
+            var dd0 = _a1 / (n0 * k0);
+            var fact2 = dd0 * dd0 / 2;
+
+            var t0 = Math.pow(Math.tan(phi1), 2);
+            var Q0 = e1sq * Math.pow(Math.cos(phi1), 2);
+            var fact3 = (5 + 3 * t0 + 10 * Q0 - 4 * Q0 * Q0 - 9 * e1sq) * Math.pow(dd0, 4) / 24;
+
+            var fact4 = (61 + 90 * t0 + 298 * Q0 + 45 * t0 * t0 - 252 * e1sq - 3 * Q0 * Q0) * Math.pow(dd0, 6) / 720;
+
+            var lof1 = _a1 / (n0 * k0);
+            var lof2 = (1 + 2 * t0 + Q0) * Math.pow(dd0, 3) / 6.0;
+            var lof3 = (5 - 2 * Q0 + 28 * t0 - 3 * Math.pow(Q0, 2) + 8 * e1sq + 24 * Math.pow(t0, 2)) * Math.pow(dd0, 5) / 120;
+            var _a2 = (lof1 - lof2 + lof3) / Math.cos(phi1);
+            var _a3 = _a2 * 180 / Math.PI;
+
+            var latitude = 180 * (phi1 - fact1 * (fact2 + fact3 + fact4)) / Math.PI;
+
+            if (!northernHemisphere){
+                latitude = -latitude;
+            }
+
+            var longitude = ((zone > 0) && (6 * zone - 183.0) || 3.0) - _a3;
+
+            var obj = {
+                latitude : latitude,
+                longitude: longitude
+            };
+
+
+            return obj;
+        }
+    </script>
+{% endblock %}
